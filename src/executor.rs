@@ -8,21 +8,18 @@ use {
         sync::mpsc::{sync_channel, Receiver, SyncSender},
         sync::{Arc, Mutex},
         task::{Context, Poll},
-        time::Duration,
     },
     // // The timer we wrote in the previous section:
     // timer_future::TimerFuture,
 };
 
-use async_book::timer_future::TimerFuture;
-
 /// Task executor that receives tasks off of a channel and runs them.
-struct Executor {
+pub struct Executor {
     ready_queue: Receiver<Arc<Task>>,
 }
 
 /// `Spawner` spawns new futures onto the task channel.
-struct Spawner {
+pub struct Spawner {
     task_sender: SyncSender<Arc<Task>>,
 }
 
@@ -41,7 +38,7 @@ struct Task {
     task_sender: SyncSender<Arc<Task>>,
 }
 
-fn new_executor_and_spawner() -> (Executor, Spawner) {
+pub fn new_executor_and_spawner() -> (Executor, Spawner) {
     // Maximum number of tasks to allow queueing in the channel at once.
     // This is just to make `sync_channel` happy, and wouldn't be present in
     // a real executor.
@@ -51,7 +48,7 @@ fn new_executor_and_spawner() -> (Executor, Spawner) {
 }
 
 impl Spawner {
-    fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
+    pub fn spawn(&self, future: impl Future<Output = ()> + Send + 'static) {
         let boxed_future = future.boxed();
         let task = Arc::new(Task {
             future: Mutex::new(Some(boxed_future)),
@@ -74,7 +71,7 @@ impl ArcWake for Task {
 }
 
 impl Executor {
-    fn run(&self) {
+    pub fn run(&self) {
         while let Ok(task) = self.ready_queue.recv() {
             // Take the future, and if it has not yet completed (is still Some),
             // poll it in an attempt to complete it.
@@ -95,23 +92,4 @@ impl Executor {
             }
         }
     }
-}
-
-fn main() {
-    let (executor, spawner) = new_executor_and_spawner();
-
-    // Spawn a task to print before and after waiting on a timer.
-    spawner.spawn(async {
-        println!("running!");
-        // Wait for our timer future to complete after two seconds.
-        TimerFuture::new(Duration::new(5, 0)).await;
-        println!("finished!!");
-    });
-
-    // Drop the spawner so that our executor knows it is finished and won't
-    // receive more incoming tasks to run.
-    drop(spawner);
-    // Run the executor until the task queue is empty.
-    // This will print "howdy!", pause, and then print "done!".
-    executor.run();
 }
