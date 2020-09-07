@@ -8,62 +8,45 @@ use tokio::runtime::Runtime;
 use tokio::task;
 use tokio::time::delay_for;
 
+use async_book::delay_future::Delay;
 use async_book::executor::new_executor_and_spawner;
 use async_book::timer_future::TimerFuture;
-use async_book::delay_future::Delay;
 use futures::task::{LocalSpawnExt, SpawnExt};
 use std::thread::Thread;
 use std::time::Duration;
 
+async fn get_async_task(task_id: &str, seconds: u64) {
+    println!("starting {}", task_id);
+    let duration = Duration::new(seconds, 0);
+
+    // TimerFuture allows us to race both tasks at once because internally it's spawning
+    // thread::sleep in parallel:
+
+    TimerFuture::new(duration).await;
+
+    // Unlike TimerFuture above, Delay checks the elapsed time without having to block the thread
+    // since it relies on timestamps instead of thread::sleep. Thus, parallelism is not required,
+    // although it results in a very busy polling loop:
+
+    // Delay::new(duration).await;
+
+    // This only works for tokio runtime:
+    // delay_for(duration).await;
+
+    // This blocks the entire executor, since it blocks the main thread:
+    // task::block_in_place(|| {
+    //     std::thread::sleep(duration);
+    // });
+
+    println!("{} complete!", task_id);
+}
+
 async fn race_tasks() {
-    async fn task_1() {
-        println!("starting task 1");
-        let duration = Duration::new(5, 0);
-
-        // TimerFuture allows us to race both tasks at once because internally it's spawning
-        // thread::sleep in parallel:
-        TimerFuture::new(duration).await;
-
-        // Unlike TimerFuture above, Delay checks the elapsed time without having to block the
-        // thread since it relies on timestamps instead of thread::sleep. Thus, parallelism is not
-        // required, although it results in a very busy polling loop:
-        // Delay::new(duration).await;
-
-        // This only works for tokio runtime:
-        // delay_for(duration).await;
-
-
-        // This blocks the entire executor, since it blocks the main thread:
-        // task::block_in_place(|| {
-        //     std::thread::sleep(duration);
-        // });
-
-        println!("task 1 complete!");
-    }
-
-    async fn task_2() {
-        println!("starting task 2");
-        let duration = Duration::new(1, 0);
-
-        TimerFuture::new(duration).await;
-
-        // Delay::new(duration).await;
-
-        // delay_for(duration).await;
-
-        // std::thread::sleep(duration);
-        // task::block_in_place(|| {
-        //     std::thread::sleep(duration);
-        // });
-
-        println!("task 2 complete!");
-    }
-
     // // the FusedFuture trait is required because select must not poll a future after it has
     // // completed:
     //
-    let t1 = task_1().fuse();
-    let t2 = task_2().fuse();
+    let t1 = get_async_task("task 1", 5).fuse();
+    let t2 = get_async_task("task 2", 1).fuse();
 
     // Unpin is necessary because the futures used by select are not taken by value, but by mutable
     // reference. By not taking ownership of the future, uncompleted futures can be used again after
