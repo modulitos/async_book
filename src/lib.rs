@@ -6,3 +6,4 @@
 
 pub mod timer_future;
 pub mod executor;
+pub mod delay_future;

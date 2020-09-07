@@ -10,6 +10,7 @@ use tokio::time::delay_for;
 
 use async_book::executor::new_executor_and_spawner;
 use async_book::timer_future::TimerFuture;
+use async_book::delay_future::Delay;
 use futures::task::{LocalSpawnExt, SpawnExt};
 use std::thread::Thread;
 use std::time::Duration;
@@ -19,13 +20,18 @@ async fn race_tasks() {
         println!("starting task 1");
         let duration = Duration::new(5, 0);
 
+        // TimerFuture allows us to race both tasks at once because internally it's spawning
+        // thread::sleep in parallel:
+        TimerFuture::new(duration).await;
+
+        // Unlike TimerFuture above, Delay checks the elapsed time without having to block the
+        // thread since it relies on timestamps instead of thread::sleep. Thus, parallelism is not
+        // required, although it results in a very busy polling loop:
+        // Delay::new(duration).await;
+
         // This only works for tokio runtime:
         // delay_for(duration).await;
 
-        // TimerFuture allows us to race both tasks at once because internally it's spawning
-        // thread::sleep in parallel:
-
-        TimerFuture::new(duration).await;
 
         // This blocks the entire executor, since it blocks the main thread:
         // task::block_in_place(|| {
@@ -39,9 +45,11 @@ async fn race_tasks() {
         println!("starting task 2");
         let duration = Duration::new(1, 0);
 
-        // delay_for(duration).await;
-
         TimerFuture::new(duration).await;
+
+        // Delay::new(duration).await;
+
+        // delay_for(duration).await;
 
         // std::thread::sleep(duration);
         // task::block_in_place(|| {
@@ -165,7 +173,7 @@ fn tokio_runtime() {
 }
 
 fn main() {
-    // custom_executor();
-    thread_pool_executor();
+    custom_executor();
+    // thread_pool_executor();
     // tokio_runtime();
 }
